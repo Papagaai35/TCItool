@@ -9,4 +9,7 @@ from tcitool.exc import UnknownCalculatorWarning
 from tcitool.func import UnitFuncs
 from tcitool.func import MeteoFuncs
 
+from tcitool.gens.registry import GeneratorRegistry
+from tcitool.gens.common import CommonMeteoGenerators
+
 from tcitool.tool import *
