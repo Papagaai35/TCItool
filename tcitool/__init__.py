@@ -1,4 +1,7 @@
 from tcitool.calc.calculator import Calculator
+from tcitool.calc.wbgt_approx import WBGTapprox_ACSMCalculator
+from tcitool.calc.wbgt_approx import WBGTapprox_BernardCalculator
+from tcitool.calc.wbgt_approx import WBGTapprox_DimiceliCalculator
 from tcitool.calc.windchill import WindChill_JAGTICalculator
 
 from tcitool.data import DataStore

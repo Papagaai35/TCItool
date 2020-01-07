@@ -9,6 +9,9 @@ class CommonMeteoGenerators(object):
         gr.register(cls.ws10, 'ws10', ['u10','v10'])
         gr.register(cls.wdir10, 'wdir10', ['u10','v10'])
 
+        gr.register(cls.dewpoint, 'd2m', 'e_kPa')
+        gr.register(cls.e, 'e_kPa', 'd2m')
+
     @classmethod
     def t2mC(cls,tool):
         """Converts the 2m temperature from K to deg C"""
@@ -39,4 +42,20 @@ class CommonMeteoGenerators(object):
         tool.data['wdir10'].attrs.update({
             'units': 'rad',
             'long_name': 'Wind direction at 10 metre'
+        })
+
+    @classmethod
+    def dewpoint(cls,tool):
+        tool.data['d2m'] = tcitool.MeteoFuncs.dewpoint(tool.data['e_kPa'])
+        tool.data['d2m'].attrs.update({
+            'units': 'K',
+            'long_name': 'Dew point'
+        })
+    @classmethod
+    def e(cls,tool):
+        tool.data['e_kPa'] = tcitool.MeteoFuncs.saturated_vapor_pressure(
+            tool.data['d2m'])
+        tool.data['e_kPa'].attrs.update({
+            'units': 'kPa',
+            'long_name': 'Vapor pressure'
         })

@@ -16,8 +16,10 @@ class Tool(object):
         self.data = tcitool.DataStore()
         self.generator_registry = tcitool.GeneratorRegistry(self)
         self.calculators = {
-            'demo': tcitool.Calculator,
-            'windchill_jagti': tcitool.WindChill_JAGTICalculator
+            'wbgt_acsm': tcitool.WBGTapprox_ACSMCalculator,
+            'wbgt_bernard': tcitool.WBGTapprox_BernardCalculator,
+            'wbgt_dimiceli': tcitool.WBGTapprox_DimiceliCalculator,
+            'windchill_jagti': tcitool.WindChill_JAGTICalculator,
         }
         self.options = {}
         self._selfassert()
