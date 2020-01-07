@@ -6,4 +6,7 @@ from tcitool.data import DataStore
 from tcitool.exc import MissingDataError
 from tcitool.exc import UnknownCalculatorWarning
 
+from tcitool.func import UnitFuncs
+from tcitool.func import MeteoFuncs
+
 from tcitool.tool import *
