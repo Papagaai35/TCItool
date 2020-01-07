@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 import xarray as xr
 
-from tcitool import *
+import tcitool
 
 class Tool(object):
     """
@@ -13,18 +13,20 @@ class Tool(object):
         data: a DataStore containing all atmospheric data points.
     """
     def __init__(self):
-        self.data = DataStore()
-        self.generator_registry = GeneratorRegistry(self)
+        self.data = tcitool.DataStore()
+        self.generator_registry = tcitool.GeneratorRegistry(self)
         self.calculators = {
-            'demo': Calculator,
-            'windchill_jagti': WindChill_JAGTICalculator
+            'demo': tcitool.Calculator,
+            'windchill_jagti': tcitool.WindChill_JAGTICalculator
         }
         self.options = {}
         self._selfassert()
 
     def _selfassert(self):
         for calc_name, calc in self.calculators.items():
-            assert issubclass(calc,Calculator)
+            assert issubclass(calc,tcitool.Calculator), (
+                "Unexpected non-Calculator %s in tcitool.Tool.calculators" %
+                calc_name)
 
     def require_data(self,*args,operation_name=""):
         missing_params = {}
@@ -53,7 +55,7 @@ class Tool(object):
                         filter(lambda opt: opt not in self.options,
                                gen['options'])))
                     msg += '--- '+", ".join(gen_missing_params)
-            raise MissingDataError(msg)
+            raise tcitool.MissingDataError(msg)
 
     def has_options(self,*args):
         return all(map(lambda opt: opt in self.options,args))
@@ -74,5 +76,5 @@ class Tool(object):
                 'Available calculators are [%s].')
             warnings.warn(warning_msg%(",".join(missing_calculators),
                                        ",".join(self.calculators.keys())),
-                          UnknownCalculatorWarning)
+                          tcitool.UnknownCalculatorWarning)
         return calculator_objs
