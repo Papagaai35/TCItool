@@ -56,6 +56,7 @@ class DataStore(object):
         self.ds = ( file_or_xarray
                     if isinstance(file_or_xarray, xr.Dataset)
                     else xr.open_dataset(file_or_xarray,**kwargs))
+        self.transpose_default()
 
     def save(self,filepath,**kwargs):
         kwargs.update({'path':filepath})
@@ -83,6 +84,7 @@ class DataStore(object):
         else:
             raise TypeError("datastore_or_xarray must be a DataStore or "
                             "xarray.Dataset")
+        self.transpose_default()
 
     def copy_empty(self):
         return self.ds.coords.to_dataset()
@@ -90,5 +92,25 @@ class DataStore(object):
     def has_keys(self,*args):
         return all(map(lambda param: param in self.ds,args))
 
+    def get_coord_var(self,coord):
+        coordxarray_1d = xr.DataArray(self.ds.coords[coord].values,
+            dims=[coord],attrs=self.ds.coords[coord].attrs)
+        _, coordxarray_md = xr.broadcast(self.ds,coordxarray_1d)
+        if self.get_chunk_size():
+            coordxarray_md = coordxarray_md.chunk(self.get_chunk_size())
+        return coordxarray_md
+
     def get_chunk_size(self):
         return {coord: chunks[0] for coord, chunks in self.ds.chunks.items()}
+
+    def refresh_chunks(self):
+        if self.get_chunk_size():
+            self.ds = self.ds.chunk(self.get_chunk_size())
+
+    def transpose_default(self,preferd_order=None):
+        preferd_order = (['time','latitude','longitude']
+                         if preferd_order is None
+                         else preferd_order)
+        if (len(self.ds.coords)==len(preferd_order) and
+                all(coord in self.ds.coords for coord in preferd_order)):
+            self.ds = self.ds.transpose(*preferd_order)

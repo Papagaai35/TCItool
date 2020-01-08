@@ -6,34 +6,9 @@ import tcitool
 class SolarGenerators(object):
     @classmethod
     def register_generators(cls,gr):
-        gr.register(cls.coord_extract,
-            ['ts','lon','lat'],
-            ['time','longitude','latitude'],
-        )
         gr.register(cls.main,
             ['SunRadVector','HourAngle','ZenithAngle','Azimuth'],
             ['time','longitude','latitude'])
-    @classmethod
-    def coord_extract(cls,tool):
-        """Extracts the coordinates time, longitude and latitude to variables"""
-        params = ['ts','lon','lat']
-        coords = ['time','longitude','latitude']
-        for param,coord in zip(params,coords):
-            if param in tool.data.ds.data_vars:
-                continue
-            elif coord in tool.data.ds.coords:
-                nparray_1d = tool.data.ds.coords[coord].values
-                xrarray_1d = xr.DataArray(nparray_1d,dims=[coord],name=param,
-                    attrs=tool.data.ds.coords[coord].attrs)
-                _, xrarray_md = xr.broadcast(tool.data.ds,xrarray_1d)
-                tool.data.ds[param] = xrarray_md
-            else:
-                raise tcitool.MissingDataError('%s is neither a data_var or '
-                    'coord in the dataset.'%coord)
-        if all(map(lambda c: c in tool.data.ds.coords,coords)):
-            tool.data.ds = tool.data.ds.transpose(*coords)
-        if tool.data.get_chunk_size():
-            tool.data.ds = tool.data.ds.chunk(tool.data.get_chunk_size())
 
     @classmethod
     def main(cls,tool):
@@ -42,13 +17,20 @@ class SolarGenerators(object):
         Source for the calculation:
             https://www.esrl.noaa.gov/gmd/grad/solcalc/calcdetails.html
         """
-        if not all(['ts' in tool.data, 'lon' in tool.data, 'lat' in tool.data]):
-            cls.coord_extract(tool)
-        lon_rad = np.deg2rad(tool.data['lon'])
+        ts = (tool.data['ts']
+               if 'ts' in tool.data.ds.data_vars
+               else tool.data.get_coord_var('time'))
+        lon = (tool.data['lon']
+               if 'lon' in tool.data.ds.data_vars
+               else tool.data.get_coord_var('longitude'))
+        lat = (tool.data['lat']
+               if 'lat' in tool.data.ds.data_vars
+               else tool.data.get_coord_var('latitude'))
+        lon_rad = np.deg2rad(lon)
         lon_rad.attrs = {'units':'rad','long_name': 'longitude'}
-        lat_rad = np.deg2rad(tool.data['lat'])
+        lat_rad = np.deg2rad(lat)
         lat_rad.attrs = {'units':'rad','long_name': 'latitude'}
-        unix_ts = tool.data['ts'].astype('datetime64[s]').astype('int')
+        unix_ts = ts.astype('datetime64[s]').astype('int')
         unix_ts.attrs = {'units':'s','long_name':'seconds since 1970-01-01'}
         julian_day = unix_ts/86400.0 + 2440587.5
         julian_day.attrs = {'units':'days',
@@ -90,7 +72,6 @@ class SolarGenerators(object):
             (1+eccent_earth_orbit*np.cos(anom_sun_true))
         )
         sun_rad_vector.attrs = {'units':'au','long_name':'Sun Rad Vector'}
-        tool.data['SunRadVector'] = sun_rad_vector
         sun_app_long = np.deg2rad(
             np.rad2deg(long_sun_true) - 0.00569 - 0.00478 *
             np.sin(np.deg2rad(125.04 - 1934.136 * julian_century)) )
@@ -123,7 +104,6 @@ class SolarGenerators(object):
         true_solar_time.attrs = {'units':'min','long_name':'True Solar Time'}
         hour_angle = np.deg2rad(true_solar_time/4 - 180)
         hour_angle.attrs = {'units':'rad','long_name':'Hour Angle'}
-        tool.data['HourAngle'] = hour_angle
 
         zenith_uncorr = np.arccos(
             np.sin(lat_rad) * np.sin(sun_declin)
@@ -154,7 +134,6 @@ class SolarGenerators(object):
         zenith = np.deg2rad(90)-elevation_corr
         zenith.attrs = {'units':'rad',
             'long_name':'Solar Zenith Angle corrected for atm refraction'}
-        tool.data['ZenithAngle'] = zenith
 
         azimuth_arccos = np.arccos( ( (
                 (np.sin(lat_rad) * np.cos(zenith_uncorr) - np.sin(sun_declin))
@@ -168,4 +147,9 @@ class SolarGenerators(object):
         ) % 360)
         azimuth.attrs = {'units':'deg CW from N',
             'long_name':'Solar Azimuth Angle'}
+
+        tool.data['SunRadVector'] = sun_rad_vector
+        tool.data['HourAngle'] = hour_angle
+        tool.data['ZenithAngle'] = zenith
         tool.data['Azimuth'] = azimuth
+        tool.data.transpose_default()
