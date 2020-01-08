@@ -89,3 +89,6 @@ class DataStore(object):
 
     def has_keys(self,*args):
         return all(map(lambda param: param in self.ds,args))
+
+    def get_chunk_size(self):
+        return {coord: chunks[0] for coord, chunks in self.ds.chunks.items()}

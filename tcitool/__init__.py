@@ -14,5 +14,6 @@ from tcitool.func import MeteoFuncs
 
 from tcitool.gens.registry import GeneratorRegistry
 from tcitool.gens.common import CommonMeteoGenerators
+from tcitool.gens.solar import SolarGenerators
 
 from tcitool.tool import *
