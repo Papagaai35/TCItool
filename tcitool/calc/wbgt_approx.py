@@ -6,7 +6,7 @@ class WBGTapprox_ACSMCalculator(tcitool.Calculator):
     def __init__(self,tool):
         super().__init__(tool)
         self.export_params = {'wbgt':'wbgt_acsm'}
-        self.require_data('t2m','d2mC')
+        self.require_data('t2m','d2m')
 
     def main(self):
         t2mC = self.tool.data.get('t2mC',
@@ -14,7 +14,7 @@ class WBGTapprox_ACSMCalculator(tcitool.Calculator):
         d2mC = self.tool.data.get('d2mC',
             tcitool.UnitFuncs.tempK2C(self.tool.data['d2m']))
         vapor_pressure = 6.112 * np.exp((17.67*d2mC)/(d2mC+243.5))
-        wbgt = 0.567 * t2mC + 0.393 * vapor_pressure + 3.94,
+        wbgt = 0.567 * t2mC + 0.393 * vapor_pressure + 3.94
         wbgt.attrs = {
             'units': 'deg C',
             'long_name': 'Wet Bulb Globe Temperature (using ACSM '

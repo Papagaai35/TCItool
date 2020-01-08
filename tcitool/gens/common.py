@@ -10,7 +10,12 @@ class CommonMeteoGenerators(object):
         gr.register(cls.wdir10, 'wdir10', ['u10','v10'])
 
         gr.register(cls.dewpoint, 'd2m', 'e_kPa')
+        gr.register(cls.from_rh, 'd2m', ['t2m','rh'])
         gr.register(cls.e, 'e_kPa', 'd2m')
+        gr.register(cls.from_rh, 'e_kPa', ['t2m','rh'])
+        gr.register(cls.e_sat, 'e_sat_kPa', 't2m')
+        gr.register(cls.rh, 'rh', ['t2m','e_kPa'])
+        gr.register(cls.rh, 'rh', ['t2m','d2m'])
 
     @classmethod
     def t2mC(cls,tool):
@@ -52,6 +57,14 @@ class CommonMeteoGenerators(object):
             'long_name': 'Dew point'
         })
     @classmethod
+    def e_sat(cls,tool):
+        tool.data['e_sat_kPa'] = tcitool.MeteoFuncs.saturated_vapor_pressure(
+            tool.data['t2m'])
+        tool.data['e_sat_kPa'].attrs.update({
+            'units': 'kPa',
+            'long_name': 'Saturated vapor pressure'
+        })
+    @classmethod
     def e(cls,tool):
         tool.data['e_kPa'] = tcitool.MeteoFuncs.saturated_vapor_pressure(
             tool.data['d2m'])
@@ -59,3 +72,26 @@ class CommonMeteoGenerators(object):
             'units': 'kPa',
             'long_name': 'Vapor pressure'
         })
+    @classmethod
+    def rh(cls,tool):
+        """Calculates relative humidity from the temperature and dew point"""
+        if 'e_sat_kPa' not in tool.data and 't2m' in tool.data:
+            cls.e_sat(tool)
+        if 'e_kPa' not in tool.data and 'd2m' in tool.data:
+            cls.e(tool)
+        tool.data['rh'] = tool.data['e_kPa']/tool.data['e_sat_kPa']
+        tool.data['rh'].attrs.update({
+            'units': 'fraction',
+            'long_name': 'Relative Humidity'
+        })
+    @classmethod
+    def from_rh(cls,tool):
+        """Calculates dewpoint and vapor_pressure from temp and rh"""
+        if 'e_sat_kPa' not in tool.data and 't2m' in tool.data:
+            cls.e_sat(tool)
+        tool.data['e_kPa'] = tool.data['e_sat_kPa'] * tool.data['rh']
+        tool.data['e_kPa'].attrs.update({
+            'units': 'kPa',
+            'long_name': 'Vapor pressure'
+        })
+        cls.dewpoint(tool)

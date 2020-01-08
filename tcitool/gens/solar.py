@@ -7,7 +7,7 @@ class SolarGenerators(object):
     @classmethod
     def register_generators(cls,gr):
         gr.register(cls.main,
-            ['soldist','solha','solza','solaz'],
+            ['soldist','solhour','solza','solazimuth'],
             ['time','longitude','latitude'])
 
     @classmethod
@@ -149,7 +149,7 @@ class SolarGenerators(object):
             'long_name':'Solar Azimuth Angle'}
 
         tool.data['soldist'] = sun_rad_vector
-        tool.data['solha'] = hour_angle
+        tool.data['solhour'] = hour_angle
         tool.data['solza'] = zenith
-        tool.data['solaz'] = azimuth
+        tool.data['solazimuth'] = azimuth
         tool.data.transpose_default()
