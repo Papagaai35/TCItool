@@ -1,4 +1,5 @@
 import numpy as np
+import xarray as xr
 import tcitool
 
 class WBGTapprox_ACSMCalculator(tcitool.Calculator):
@@ -29,18 +30,18 @@ class WBGTapprox_BernardCalculator(tcitool.Calculator):
     def __init__(self,tool):
         super().__init__(tool)
         self.export_params = {'wbgt':'wbgt_bernard'}
-        self.tool.requireData('t2m','e_kPa','ZenithAngle')
+        self.tool.require_data('t2m','e_kPa','solza')
     def main(self):
         t2mC = self.tool.data.get('t2mC',
             tcitool.UnitFuncs.tempK2C(self.tool.data['t2m']))
-        direct_sun = ~np.isnan(self.tool.data['ZenithAngle'])
+        direct_sun = xr.where(self.tool.data['solza']<1.57079615,1,0)
         direct_sun.attrs = {
             'units': 'bool',
             'long_name': 'Sensor in direct sunlight (True if so)',
         }
         wbgt = (1.1 + 0.66*t2mC +
             2.9*self.tool.data['e_kPa'] +
-            np.where(direct_sun,-1.8,0))
+            direct_sun * -1.8)
         wbgt.attrs = {
             'units': 'deg C',
             'long_name': 'Wet Bulb Globe Temperature (using Bernard & Barrow '
@@ -57,7 +58,7 @@ class WBGTapprox_DimiceliCalculator(tcitool.Calculator):
     def __init__(self,tool):
         super().__init__(tool)
         self.export_params = {'wbgt':'wbgt_dimiceli'}
-        self.tool.requireData('t2m','rh')
+        self.tool.require_data('t2m','rh')
     def main(self):
         t2mC = self.tool.data.get('t2mC',
             tcitool.UnitFuncs.tempK2C(self.tool.data['t2m']))
