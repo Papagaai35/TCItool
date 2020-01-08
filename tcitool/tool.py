@@ -80,3 +80,6 @@ class Tool(object):
                                        ",".join(self.calculators.keys())),
                           tcitool.UnknownCalculatorWarning)
         return calculator_objs
+
+    def list_calculators(self):
+        return list(self.calculators.keys())
