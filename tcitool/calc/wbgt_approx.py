@@ -38,9 +38,9 @@ class WBGTapprox_BernardCalculator(tcitool.Calculator):
             'units': 'bool',
             'long_name': 'Sensor in direct sunlight (True if so)',
         }
-        wbgt = 1.1 + 0.66*t2mC +
+        wbgt = (1.1 + 0.66*t2mC +
             2.9*self.tool.data['e_kPa'] +
-            np.where(direct_sun,-1.8,0)
+            np.where(direct_sun,-1.8,0))
         wbgt.attrs = {
             'units': 'deg C',
             'long_name': 'Wet Bulb Globe Temperature (using Bernard & Barrow '
@@ -63,15 +63,15 @@ class WBGTapprox_DimiceliCalculator(tcitool.Calculator):
             tcitool.UnitFuncs.tempK2C(self.tool.data['t2m']))
         rh_procent = self.tool.data.get('rh_procent',
             tcitool.UnitFuncs.rhfraction2procent(self.tool.data['rh']))
-        wbgt = -5.806 \
-                + 0.672*t2mC \
-                - 0.006*np.power(t2mC,2) \
-                + 0.061*rh_procent \
-                + 0.004*rh_procent*t2mC \
-                + 9.9e-5*rh_procent*np.power(t2mC,2) \
-                - 3.3e-5*np.power(rh_procent,2) \
-                - 5e-6*np.power(rh_procent,2)*t2mC \
-                - 1e-7*np.power(rh_procent,2)*np.power(t2mC,2)
+        wbgt = (-5.806
+                + 0.672*t2mC
+                - 0.006*np.power(t2mC,2)
+                + 0.061*rh_procent
+                + 0.004*rh_procent*t2mC
+                + 9.9e-5*rh_procent*np.power(t2mC,2)
+                - 3.3e-5*np.power(rh_procent,2)
+                - 5e-6*np.power(rh_procent,2)*t2mC
+                - 1e-7*np.power(rh_procent,2)*np.power(t2mC,2))
         wbgt.attrs = {
             'units': 'deg C',
             'long_name': 'Wet Bulb Globe Temperature (using Bernard & Barrow '
