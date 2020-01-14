@@ -25,6 +25,42 @@ class DataStore(object):
             self._ds = value
         return locals()
     ds = property(**ds())
+    def shape():
+        doc = "The shape of the data in the xarray.Dataset"
+        def fget(self):
+            params = list(self.ds.keys())
+            shp = self.ds[params[0]].shape
+            for param in params:
+                if self.ds[param].shape != shp:
+                    raise ValueError("Different parameters have different "
+                        "shapes")
+            return shp
+        return locals()
+    shape = property(**shape())
+    def dims():
+        doc = "The dimensions of the data in the xarray.Dataset"
+        def fget(self):
+            params = list(self.ds.keys())
+            dims = self.ds[params[0]].dims
+            for param in params:
+                if self.ds[param].dims != dims:
+                    raise ValueError("Different parameters have different "
+                        "dimensions")
+            return dims
+        return locals()
+    dims = property(**dims())
+    def chunks():
+        doc = "The chunk size of the data in the xarray.Dataset"
+        def fget(self):
+            params = list(self.ds.keys())
+            chunks = sum(self.ds[params[0]].chunks, ())
+            for param in params:
+                if sum(self.ds[param].chunks, ()) != chunks:
+                    raise ValueError("Different parameters have different "
+                        "chunk sizes")
+            return chunks
+        return locals()
+    chunks = property(**chunks())
 
     def __getitem__(self,*args,**kwargs):
         """Alias for xarray.Dataset.__getitem__"""
@@ -107,6 +143,10 @@ class DataStore(object):
         if self.get_chunk_size():
             self.ds = self.ds.chunk(self.get_chunk_size())
 
+
+    def persist(self):
+        self._ds.persist()
+
     def transpose_default(self,preferd_order=None):
         preferd_order = (['time','latitude','longitude']
                          if preferd_order is None
@@ -114,3 +154,23 @@ class DataStore(object):
         if (len(self.ds.coords)==len(preferd_order) and
                 all(coord in self.ds.coords for coord in preferd_order)):
             self.ds = self.ds.transpose(*preferd_order)
+
+    def table_repr(self):
+        table_shape = [2,4,5,9,5]
+        header_line = ['Nr','Name','Units', 'Long name', 'Shape']
+        table = []
+        keys = list(self.ds.keys())
+        for keyi in range(len(keys)):
+            key = keys[keyi]
+            tableline = (str(keyi),key,
+                self.ds[key].attrs.get('units','?'),
+                self.ds[key].attrs.get('long_name','?'),
+                str(self.ds[key].shape))
+            for i in range(4):
+                table_shape[i] = max(table_shape[i],len(tableline[i]))
+            table.append(tableline)
+        fmt_string = "{:%d} | {:<%d} | {:<%d} | {:<%d} | {:<%d}"%tuple(table_shape)
+        print(fmt_string.format(*header_line))
+        print('-'*(sum(table_shape)+12))
+        for l in table:
+            print(fmt_string.format(*l))

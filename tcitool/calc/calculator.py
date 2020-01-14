@@ -1,3 +1,6 @@
+import sys
+import numpy as np
+
 class Calculator(object):
     """A calculator calculates a thermal comfort index.
 
@@ -29,8 +32,17 @@ class Calculator(object):
         )
 
     def run(self):
+        self.preface()
         self.main()
-        self.export()
+        self.postface()
 
+    def preface(self):
+        pass
     def main(self):
         raise NotImplementedError()
+    def postface(self):
+        self.export()
+
+class OptimizationCalculator(Calculator):
+    def main(self):
+        self.optimize()

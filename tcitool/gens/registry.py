@@ -5,6 +5,7 @@ class GeneratorRegistry(object):
         self.tool = tool
         self.generators = {}
         tcitool.CommonMeteoGenerators.register_generators(self)
+        tcitool.IntegratedVarsGenerators.register_generators(self)
         tcitool.SolarGenerators.register_generators(self)
 
     def register(self,func,provides=None,requires=None,options=None):
