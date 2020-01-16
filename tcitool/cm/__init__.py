@@ -45,7 +45,6 @@ try:
                 _step_offset, _step_color, _step_alpha = (_step.attrib[p] for p in ['offset','stop-color','stop-opacity'])
                 _cmap_array.append(_process_color(_step_color,_step_alpha))
                 _cmap_offset.append(np.round(float(_step_offset[:-1])/100,5))
-            print(_cmap_offset,_cmap_array)
             _cmap_offset[0],_cmap_offset[-1] = 0.,1.
             _cmap = matplotlib.colors.LinearSegmentedColormap.from_list(name=_cmap_name,colors=list(zip(_cmap_offset,_cmap_array)))
             _cmap_r = _cmap.reversed(name=_cmap_name_r)
