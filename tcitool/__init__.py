@@ -1,3 +1,5 @@
+import tcitool.cm as cm
+
 from tcitool.exc import MissingDataError
 from tcitool.exc import UnknownCalculatorWarning
 
