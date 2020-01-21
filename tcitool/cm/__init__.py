@@ -46,7 +46,7 @@ try:
                 _cmap_array.append(_process_color(_step_color,_step_alpha))
                 _cmap_offset.append(np.round(float(_step_offset[:-1])/100,5))
             _cmap_offset[0],_cmap_offset[-1] = 0.,1.
-            _cmap = matplotlib.colors.LinearSegmentedColormap.from_list(name=_cmap_name,colors=list(zip(_cmap_offset,_cmap_array)))
+            _cmap = matplotlib.colors.LinearSegmentedColormap.from_list(name=_cmap_name,colors=list(zip(_cmap_offset,_cmap_array)),N=768)
             _cmap_r = _cmap.reversed(name=_cmap_name_r)
             cmapnames.append(_cmap_name)
             cmap_d[_cmap_name] = _cmap
