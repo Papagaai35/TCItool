@@ -20,6 +20,7 @@ class Tool(object):
             'wbgt_argonne': tcitool.WBGT_ArgonneCalculator,
             'wbgt_bernard': tcitool.WBGTapprox_BernardCalculator,
             'wbgt_dimiceli': tcitool.WBGTapprox_DimiceliCalculator,
+            'wbgt_gommers': tcitool.WBGTapprox_GommersCalculator,
             'wcet_jagti': tcitool.WindChill_JAGTICalculator,
             'windchill_jagti': tcitool.WindChill_JAGTICalculator,
         }

@@ -85,3 +85,42 @@ class WBGTapprox_DimiceliCalculator(tcitool.Calculator):
                 'doi: 10.1007/978-94-007-4786-9_26.'
         }
         self.data['wbgt'] = wbgt
+
+
+class WBGTapprox_GommersCalculator(tcitool.Calculator):
+    def __init__(self,tool):
+        super().__init__(tool)
+        self.export_params = {'wbgt':'wbgt_gommers'}
+        self.tool.require_data('t2m','d2m','skt','ws10','fsr','Isw_in')
+    def main(self):
+        t2mC = self.tool.data.get('t2mC',
+            tcitool.UnitFuncs.tempK2C(self.tool.data['t2m']))
+        d2mC = self.tool.data.get('d2mC',
+            tcitool.UnitFuncs.tempK2C(self.tool.data['d2m']))
+        Isw_in = np.clip(self.tool.data['Isw_in'],0,None)
+        ACSM_vapor_pressure = 6.112 * np.exp((17.67*d2mC)/(d2mC+243.5))
+        ACSM_wbgt = 0.567 * t2mC + 0.393 * ACSM_vapor_pressure + 3.94
+        wind2m = (self.tool.data['ws10']
+            * (np.log(2 / self.tool.data['fsr'])
+                / np.log(10 / self.tool.data['fsr'])))
+        wind2m = np.clip(wind2m,0.1,None)
+        t2mClog = np.log(t2mC)
+
+        wbgt = xr.where(ACSM_wbgt<0,np.nan,
+            xr.where(t2mClog<0.01,np.nan,
+            -17.250591
+            + 0.4253438 * np.sqrt(self.tool.data['skt']) * np.sqrt(ACSM_wbgt)
+            + 7.09012e-05 * np.power(Isw_in, 1.5) * np.reciprocal(wind2m)
+            - 4.750152e-06 * np.power(Isw_in, 1.5) * np.reciprocal(wind2m ** 2)
+            + 0.04459706 * t2mClog * np.sqrt(Isw_in)
+            - 7.534906e-04 * Isw_in * t2mClog))
+        wbgt.attrs = {
+            'units': 'deg C',
+            'long_name': 'WBGT using the Gommers Stepwise Approximation '
+                'of Liljegren\'s Argonne model',
+            'source': 'Gommers, D. J., 2019: Modelleren van de Wet Bulb Globe '
+                'Temperature: Ter voorkoming van hitteletsel. MSc Internship '
+                'Report. Wageningen University & Research and the Joint '
+                'Meteorological Group, Royal Netherlands Air Force.'
+        }
+        self.data['wbgt'] = wbgt

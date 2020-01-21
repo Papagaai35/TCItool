@@ -18,6 +18,7 @@ from tcitool.calc.calculator import OptimizationCalculator
 from tcitool.calc.wbgt_approx import WBGTapprox_ACSMCalculator
 from tcitool.calc.wbgt_approx import WBGTapprox_BernardCalculator
 from tcitool.calc.wbgt_approx import WBGTapprox_DimiceliCalculator
+from tcitool.calc.wbgt_approx import WBGTapprox_GommersCalculator
 from tcitool.calc.wbgt_argonne import WBGT_ArgonneCalculator
 from tcitool.calc.windchill import WindChill_JAGTICalculator
 
