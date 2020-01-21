@@ -75,7 +75,7 @@ class WBGTapprox_DimiceliCalculator(tcitool.Calculator):
                 - 1e-7*np.power(rh_procent,2)*np.power(t2mC,2))
         wbgt.attrs = {
             'units': 'deg C',
-            'long_name': 'Wet Bulb Globe Temperature (using Bernard & Barrow '
+            'long_name': 'Wet Bulb Globe Temperature (using Dimiceli et al. '
                 'calculation method)',
             'source': 'Dimiceli, V. E., S. F. Piltz, en S. A. Amburn, 2013: '
                 'Black Globe Temperature Estimate for the WBGT Index, '
