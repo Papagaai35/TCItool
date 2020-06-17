@@ -4,7 +4,7 @@ A Python3 package to calculate thermal comfort indexes (such as the Wet Bulb Glo
 ![Python v3.7](https://img.shields.io/badge/python-v3.7-blue)
 ![License](https://img.shields.io/github/license/papagaai35/TCItool)
 ![Last commit](https://img.shields.io/github/last-commit/papagaai35/TCItool)
-![Release v0.1](https://img.shields.io/badge/release-v0.1-blue)
+![Release v1.0](https://img.shields.io/github/v/tag/Papagaai35/TCItool?label=release)
 
 ## Supported indexes
 This package is now able to calculate the following indexes
