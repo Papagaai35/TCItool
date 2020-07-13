@@ -91,7 +91,7 @@ class WBGTapprox_GommersCalculator(tcitool.Calculator):
     def __init__(self,tool):
         super().__init__(tool)
         self.export_params = {'wbgt':'wbgt_gommers'}
-        self.tool.require_data('t2m','d2m','skt','ws10','fsr','Isw_in')
+        self.tool.require_data('t2m','d2m','skt','ws2','Isw_in')
     def main(self):
         t2mC = self.tool.data.get('t2mC',
             tcitool.UnitFuncs.tempK2C(self.tool.data['t2m']))
@@ -100,9 +100,7 @@ class WBGTapprox_GommersCalculator(tcitool.Calculator):
         Isw_in = np.clip(self.tool.data['Isw_in'],0,None)
         ACSM_vapor_pressure = 6.112 * np.exp((17.67*d2mC)/(d2mC+243.5))
         ACSM_wbgt = 0.567 * t2mC + 0.393 * ACSM_vapor_pressure + 3.94
-        wind2m = (self.tool.data['ws10']
-            * (np.log(2 / self.tool.data['fsr'])
-                / np.log(10 / self.tool.data['fsr'])))
+        wind2m = self.tool.data['ws2']
         wind2m = np.clip(wind2m,0.1,None)
         t2mClog = np.log(t2mC)
 

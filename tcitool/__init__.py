@@ -12,6 +12,7 @@ from tcitool.gens.registry import GeneratorRegistry
 from tcitool.gens.common import CommonMeteoGenerators
 from tcitool.gens.common import IntegratedVarsGenerators
 from tcitool.gens.solar import SolarGenerators
+from tcitool.gens.harmonie import HarmonieGenerators
 
 from tcitool.calc.calculator import Calculator
 from tcitool.calc.calculator import OptimizationCalculator

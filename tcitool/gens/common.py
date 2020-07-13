@@ -1,3 +1,5 @@
+import numpy as np
+import xarray as xr
 import tcitool
 
 class CommonMeteoGenerators(object):
@@ -8,6 +10,8 @@ class CommonMeteoGenerators(object):
         gr.register(cls.sktC, 'sktC', 'skt')
         gr.register(cls.ws10, 'ws10', ['u10','v10'])
         gr.register(cls.wdir10, 'wdir10', ['u10','v10'])
+        gr.register(cls.ws2, 'ws2', ['ws10','fsr'])
+        gr.register(cls.ws2, 'ws2', ['u10','v10','fsr'])
 
         gr.register(cls.dewpoint, 'd2m', 'e_kPa')
         gr.register(cls.from_rh, 'd2m', ['t2m','rh'])
@@ -17,8 +21,10 @@ class CommonMeteoGenerators(object):
         gr.register(cls.rh, 'rh', ['t2m','e_kPa'])
         gr.register(cls.rh, 'rh', ['t2m','d2m'])
 
-        gr.register(cls.pressure_kPa, ['sp_kPa','msl_kPa'], ['sp','msl'])
-        gr.register(cls.pressure_Pa,  ['sp','msl'], ['sp_kPa','msl_kPa'])
+        gr.register(cls.pressure_kPa, ['msl_kPa'], ['msl'])
+        gr.register(cls.surf_pressure_kPa, ['sp_kPa'], ['sp'])
+        gr.register(cls.pressure_Pa,  ['msl'], ['msl_kPa'])
+        gr.register(cls.surf_pressure_Pa,  ['sp'], ['sp_kPa'])
 
     @classmethod
     def t2mC(cls,tool):
@@ -47,6 +53,16 @@ class CommonMeteoGenerators(object):
             tool.data['u10'],tool.data['v10'])
         tool.data['ws10'].attrs = tool.data['u10'].attrs
         tool.data['ws10'].attrs['long_name'] = 'Wind speed at 10 metre'
+    @classmethod
+    def ws2(cls,tool):
+        if 'ws10' not in tool.data and 'u10' in tool.data and 'v10' in tool.data:
+            cls.ws10(tool)
+        tool.data['ws2'] = tcitool.MeteoFuncs.wind_at_height_using_fsr(
+            tool.data['ws10'],
+            tool.data['fsr'],
+            2)
+        tool.data['ws2'].attrs = tool.data['ws10'].attrs
+        tool.data['ws2'].attrs['long_name'] = 'Wind speed at 2 metre'
     @classmethod
     def wdir10(cls,tool):
         tool.data['wdir10'] = tcitool.MeteoFuncs.wind_direction(
@@ -106,31 +122,38 @@ class CommonMeteoGenerators(object):
     @classmethod
     def pressure_kPa(cls,tool):
         msl = tool.data['msl']/1000
-        sp = tool.data['sp']/1000
         tool.data['msl_kPa'] = msl.assign_attrs(units='kPa',
             long_name=tool.data['msl'].attrs['long_name'])
+        tool.data.ds = tool.data.ds.drop_vars(['msl'])
+
+    @classmethod
+    def surf_pressure_kPa(cls,tool):
+        sp = tool.data['sp']/1000
         tool.data['sp_kPa'] = sp.assign_attrs(units='kPa',
             long_name=tool.data['sp'].attrs['long_name'])
-        tool.data.ds = tool.data.ds.drop_vars(['msl','sp'])
+        tool.data.ds = tool.data.ds.drop_vars(['sp'])
 
     @classmethod
     def pressure_Pa(cls,tool):
         msl = tool.data['msl_kPa']*1000
-        sp = tool.data['sp_kPa']*1000
         tool.data['msl'] = msl.assign_attrs(units='Pa',
             long_name=tool.data['msl_kPa'].attrs['long_name'])
+        tool.data.ds = tool.data.ds.drop_vars(['msl_kPa'])
+    @classmethod
+    def surf_pressure_Pa(cls,tool):
+        sp = tool.data['sp_kPa']*1000
         tool.data['sp'] = sp.assign_attrs(units='Pa',
             long_name=tool.data['sp_kPa'].attrs['long_name'])
-        tool.data.ds = tool.data.ds.drop_vars(['msl_kPa','sp_kPa'])
+        tool.data.ds = tool.data.ds.drop_vars(['sp_kPa'])
 
 class IntegratedVarsGenerators(object):
     @classmethod
-
     def register_generators(cls,gr):
         gr.register(cls.Isw_in,'Isw_in','ssrd','radiation_integration_time')
         gr.register(cls.Ilw_in,'Ilw_in','strd','radiation_integration_time')
         gr.register(cls.Ibeam,'Ibeam','fdir','radiation_integration_time')
 
+    @classmethod
     def cumulatives2regular(cls,data,axis):
         """Helper-function which converts cumulative metrics to averages
 
@@ -145,7 +168,7 @@ class IntegratedVarsGenerators(object):
         prev = np.roll(data,1,axis)
         slices = [(slice(0,1,None)
                    if i==axis
-                   else slice(None)) for i in range(data.ndims)]
+                   else slice(None)) for i in range(data.ndim)]
         prev[slices] = np.nan
         return data-prev
 

@@ -53,12 +53,15 @@ class DataStore(object):
         doc = "The chunk size of the data in the xarray.Dataset"
         def fget(self):
             params = list(self.ds.keys())
-            chunks = sum(self.ds[params[0]].chunks, ())
-            for param in params:
-                if sum(self.ds[param].chunks, ()) != chunks:
-                    raise ValueError("Different parameters have different "
-                        "chunk sizes")
-            return chunks
+            chunklist = self.ds[params[0]].chunks
+            if chunklist is not None:
+                chunks = sum(chunklist, ())
+                for param in params:
+                    if sum(self.ds[param].chunks, ()) != chunks:
+                        raise ValueError("Different parameters have different "
+                            "chunk sizes")
+                return chunks
+            return None
         return locals()
     chunks = property(**chunks())
 
@@ -93,6 +96,27 @@ class DataStore(object):
                     if isinstance(file_or_xarray, xr.Dataset)
                     else xr.open_dataset(file_or_xarray,**kwargs))
         self.transpose_default()
+
+    def load_harmonie(self,file_or_xarray,**kwargs):
+        ds = ( file_or_xarray
+               if isinstance(file_or_xarray, xr.Dataset)
+               else xr.open_dataset(file_or_xarray,**kwargs))
+        ds = ds.squeeze(drop=True)
+        windheightcoord = [coord for coord in ds['u'].coords.keys() if coord not in ['time','lon','lat']][0]
+        tempheightcoord = [coord for coord in ds['t'].coords.keys() if coord not in ['time','lon','lat']][0]
+        ds = ds.sel(indexers={windheightcoord:10.0,tempheightcoord:2.0},method='nearest',drop=True)
+        ds['var156'].attrs.update({'code':156})
+        ds['var157'].attrs.update({'code':157,'long_name': 'Absorbed solar radiation [DGS guess]','units':'J m-2'})
+        ds = ds.drop(labels=['cwat','rain_2'],errors='ignore').squeeze(drop=True)
+        ds = ds.rename({ 'lon': 'longitude',
+                         'lat': 'latitude',
+                         'p': 'msl',
+                         'u': 'u10',
+                         'v': 'v10',
+                         't': 't2m',
+                         'r': 'rh'})
+        ds['skt'] = ds['t2m']
+        self.ds = ds
 
     def save(self,filepath,**kwargs):
         kwargs.update({'path':filepath})
@@ -148,7 +172,7 @@ class DataStore(object):
         self._ds.persist()
 
     def transpose_default(self,preferd_order=None):
-        preferd_order = (['time','latitude','longitude']
+        preferd_order = (['time','longitude','latitude']
                          if preferd_order is None
                          else preferd_order)
         if (len(self.ds.coords)==len(preferd_order) and
@@ -174,3 +198,33 @@ class DataStore(object):
         print('-'*(sum(table_shape)+12))
         for l in table:
             print(fmt_string.format(*l))
+
+    def dsrepr(self):
+        def trimdots(s,l):
+            return s if len(s)<=l else s[:(l-3)]+'...'
+
+        print("<xarray.{}>".format(type(self.ds).__name__))
+        print("Dimensions:", dict(self.ds.dims))
+        print(self.ds.coords)
+        print("Data variables:")
+        missing_code = 1000
+        keydict = {}
+        for key in self.ds:
+            code = self.ds[key].attrs.get('code',missing_code)
+            if code==missing_code:
+                missing_code+=1
+            keydict[code] = key
+        for code in sorted(keydict.keys()):
+            key = keydict[code]
+            codedisp = self.ds[key].attrs.get('code',-1)
+            codedisp = '---' if codedisp<0 else '%03d'%codedisp
+            print("    %-3s %-10s %-45s %-13s %-14s (%s)"%(
+                codedisp,
+                trimdots(key,10),
+                trimdots(self.ds[key].attrs.get('long_name',key),45),
+                trimdots(self.ds[key].attrs.get('units','???'),13),
+                trimdots(str(self.ds[key].dtype),14),
+                ', '.join(self.ds[key].coords.keys())))
+        print('Attributes:')
+        for k,v in self.ds.attrs.items():
+            print("    %-14s %s"%(trimdots(k,14),trimdots(v,63)))

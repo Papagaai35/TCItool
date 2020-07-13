@@ -17,15 +17,26 @@ class SolarGenerators(object):
         Source for the calculation:
             https://www.esrl.noaa.gov/gmd/grad/solcalc/calcdetails.html
         """
-        ts = (tool.data['ts']
-               if 'ts' in tool.data.ds.data_vars
-               else tool.data.get_coord_var('time'))
-        lon = (tool.data['lon']
-               if 'lon' in tool.data.ds.data_vars
-               else tool.data.get_coord_var('longitude'))
-        lat = (tool.data['lat']
-               if 'lat' in tool.data.ds.data_vars
-               else tool.data.get_coord_var('latitude'))
+        ts, lon, lat = cls.extractCoordVars(tool.data.ds)
+        solarparam = cls.solarParamNOAA(ts,lon,lat)
+        for key, array in solarparam.items():
+            tool.data[key] = array
+        tool.data.transpose_default()
+
+    @classmethod
+    def extractCoordVars(cls,ds):
+        def get_coord_var(ds,coord):
+            coordxarray_1d = xr.DataArray(np.atleast_1d(ds.coords[coord].values),
+                dims=[coord],attrs=ds.coords[coord].attrs)
+            _, coordxarray_md = xr.broadcast(ds,coordxarray_1d)
+            return coordxarray_md
+        ts = (ds['ts'] if 'ts' in ds.data_vars else get_coord_var(ds,'time'))
+        lon = (ds['lon'] if 'lon' in ds.data_vars else get_coord_var(ds,'longitude'))
+        lat = (ds['lat'] if 'lat' in ds.data_vars else get_coord_var(ds,'latitude'))
+        return ts, lon, lat
+
+    @classmethod
+    def solarParamNOAA(cls,ts,lon,lat):
         lon_rad = np.deg2rad(lon)
         lon_rad.attrs = {'units':'rad','long_name': 'longitude'}
         lat_rad = np.deg2rad(lat)
@@ -86,7 +97,7 @@ class SolarGenerators(object):
         obliq_corr.attrs = {'units':'rad','long_name':'Obliq Corr'}
 
         sun_rt_ascen = np.arctan2(
-            np.cos(sun_app_long),np.cos(obliq_corr)*np.sin(sun_app_long))
+            np.cos(obliq_corr)*np.sin(sun_app_long),np.cos(sun_app_long))
         sun_rt_ascen.attrs = {'units':'rad','long_name':'Sun Rt Ascen'}
         sun_declin = np.arcsin(np.sin(obliq_corr)*np.sin(sun_app_long))
         sun_declin.attrs = {'units':'rad','long_name':'Sun Declin'}
@@ -147,9 +158,9 @@ class SolarGenerators(object):
         ) % 360)
         azimuth.attrs = {'units':'deg CW from N',
             'long_name':'Solar Azimuth Angle'}
-
-        tool.data['soldist'] = sun_rad_vector
-        tool.data['solhour'] = hour_angle
-        tool.data['solza'] = zenith
-        tool.data['solazimuth'] = azimuth
-        tool.data.transpose_default()
+        return xr.Dataset({
+            'soldist': sun_rad_vector,
+            'solhour': hour_angle,
+            'solza': zenith,
+            'solazimuth': azimuth,
+        }).squeeze(drop=True)

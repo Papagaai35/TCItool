@@ -1,9 +1,14 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
+import dask
+import dask.distributed as daskdist
 import dask.diagnostics as daskdiag
+import dask.array as da
 import scipy.optimize
-
+import concurrent.futures
+import tqdm
+from multiprocessing import cpu_count
 
 import tcitool
 import tcitool.func as tf
@@ -15,11 +20,13 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
                               'tg':'tg_argonne',
                               'tnw':'tnw_argonne'}
         self.tool.require_data('t2m','skt','rh','e_kPa','msl_kPa',
-            'ws10','fsr','Isw_in','Ibeam','solza','soldist','fal')
+            'ws2','Isw_in','Ibeam','solza','soldist','fal')
 
         self.hyperparams = kwargs
         self.fn = {}
         self.const = {}
+        self.daskarraydata = False
+        self.daskarrayparams = False
 
     def preface(self):
         self.default_hyperparams()
@@ -93,16 +100,11 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
         self.data['Isw_frac'] = np.clip(
             xr.where(self.data['Isw_in']<1,0,
                 self.tool.data['Ibeam']/self.data['Isw_in']),0,0.9)
-        self.data['ws'] = np.clip(tf.m.wind_at_height_using_fsr(
-            self.tool.data['ws10'],
-            self.tool.data['fsr'],
-            self.hyperparams['height']
-        ),self.const['MIN_SPEED'],None)
+        self.data['ws'] = np.clip(self.tool.data['ws2'],self.const['MIN_SPEED'],None)
         self.data['ws'].attrs = {
             'units': self.tool.data['ws10'].attrs['units'],
-            'long_name': ('Estimated windspeed at %3.1fm' %
-                self.hyperparams['height'])
-        }
+            'long_name': 'Estimated windspeed at 2m'}
+
         self.data = self.data[
                 ['t2m','skt','rh','e_kPa','msl_kPa','ws','Isw_in',
                 'Isw_frac','solcza','fal']
@@ -188,15 +190,16 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
             'Isw_frac','solcza','fal']]
 
     def optimize_globe_temperature(self,params):
-        param_dict = dict(params)
         param_list = ['t2m','skt','rh','e_kPa','P_kPa','ws','Isw_in',
             'Isw_frac','solcza','fal']
-        params_tuple = tuple([param_dict[p] for p in param_list])
+        params_tuple = tuple(params)[-len(param_list):]
 
         tg = np.nan
         if self.hyperparams['daytime'] and (
                 params['solcza']<=self.const['CZA_MIN'] or
                 params['Isw_in']<=1 or params['Isw_frac']<=0.01):
+            return np.nan
+        if len(params_tuple)<len(param_list):
             return np.nan
         try:
             tg = scipy.optimize.brentq(
@@ -207,8 +210,7 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
                 args=params_tuple,
                 disp=False,
                 full_output=False)
-        except ValueError as e:
-            self.postface()
+        except ValueError as err:
             if err.args[0] == 'f(a) and f(b) must have different signs':
                 olist = []
                 for t in range(self.hyperparams['Tg_lim'][0],
@@ -216,7 +218,7 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
                     olist.append('    %d: %f'%(
                         t,self.fn['Tg'](tf.u.tempC2K(t),*params_tuple)))
                 msg = ('\nNo Tg could be found, that satisfies the conditions. '
-                    '\nTg ranges between %+06.1f °C and %+06.1f °C'
+                    '\nTg ranges between %+06.1f °C and %+06.1f °C '
                     '(tollerance %05.3f °C).'
                     '\nParameters: %s \nOptimizor limits: \n')
                 msg = msg % (
@@ -225,15 +227,14 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
                     self.hyperparams['xtol'],
                     str(dict(params)),
                 ) + '\n'.join(olist)
-                e.args = tuple(err.args[0]+msg,)
+                err.args = err.args[0]+msg
             raise
         return tg
 
     def optimize_natural_wetbulb_temperature(self,params):
-        param_dict = dict(params)
         param_list = ['t2m','skt','rh','e_kPa','P_kPa','ws','Isw_in',
             'Isw_frac','solcza','fal']
-        params_tuple = tuple([param_dict[p] for p in param_list])
+        params_tuple = tuple(params)[-len(param_list):]
 
         tnw = np.nan
         if self.hyperparams['daytime'] and (
@@ -249,8 +250,7 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
                 args=params_tuple,
                 disp=False,
                 full_output=False)
-        except ValueError as e:
-            self.postface()
+        except ValueError as err:
             if err.args[0] == 'f(a) and f(b) must have different signs':
                 olist = []
                 for t in range(self.hyperparams['Tg_lim'][0],
@@ -267,41 +267,66 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
                     self.hyperparams['xtol'],
                     str(dict(params)),
                 ) + '\n'.join(olist)
-                e.args = tuple(err.args[0]+msg,)
+                err.args = err.args[0]+msg
             raise
         return tnw
 
-    def optimize(self):
-        dask = False
-        shape = self.tool.data.shape
+    def optimize_globe_temperature_aaa(self,data):
+        return np.apply_along_axis(
+            func1d=self.optimize_globe_temperature,
+            axis=0,
+            arr=data
+        )
+
+    def optimize_natural_wetbulb_temperature_aaa(self,data):
+        return np.apply_along_axis(
+            func1d=self.optimize_natural_wetbulb_temperature,
+            axis=0,
+            arr=data
+        )
+
+    def optimize(self,rechunk=None):
         if self.tool.data.shape != self.tool.data.chunks:
-            dask = True
-            df = self.optimize_params().to_dask_dataframe(
-                dim_order=['time','latitude','longitude'])
-            df['tg_5cm'] = df.apply(self.optimize_globe_temperature,
-                axis=1,meta=('tg_5cm','f8'))
-            df['tnw'] = df.apply(self.optimize_natural_wetbulb_temperature,
-                axis=1,meta=('tnw','f8'))
-            pbar = daskdiag.ProgressBar()
-            pbar.register()
-            df['tg_5´cm'] = df['tg_5cm'].compute()
-            df['tnw'] = df['tnw'].compute()
-            pbar.unregister()
-            tg_arr = df['tg_5cm'].to_dask_array(True)
-            tnw_arr = df[['tnw']].to_dask_array(True)
-            tg_arr = tg_arr.compute_chunk_sizes()
-            tnw_arr = tnw_arr.compute_chunk_sizes()
+            if self.tool.dask_client is None:
+                self.tool.dask_client = daskdist.Client()
+            client = self.tool.dask_client
+            daskds = self.optimize_params()
+            daskds_params = [daskds[key].data for key in daskds.keys()]
+            daskarray = da.stack(daskds_params, axis=0)
+            dataarray = daskarray.compute()
         else:
-            df = self.optimize_params().to_dataframe()
-            df = df.reorder_levels(['time','latitude','longitude'])
-            df['tg_5cm'] = df.apply(self.optimize_globe_temperature,
-                axis=1)
-            df['tnw'] = df.apply(self.optimize_natural_wetbulb_temperature,
-                axis=1)
-            tg_arr = df['tg_5cm'].to_numpy()
-            tnw_arr = df['tnw'].to_numpy()
-        tg_arr = tg_arr.reshape(*shape)
-        tnw_arr = tnw_arr.reshape(*shape)
+            xds = self.optimize_params()
+            dataarray = np.stack([xds[key].values for key in xds.keys()],axis=0)
+        np.save('tmp.npy',dataarray)
+        shape = dataarray.shape
+        tg_arr = np.full(shape[1:],np.nan)
+        tnw_arr = np.full(shape[1:],np.nan)
+
+        with concurrent.futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+            with tqdm.tqdm(total=shape[1]*shape[2]) as progress:
+                future_to_id = {}
+                for i in range(shape[1]*shape[2]):
+                    x, y = i//shape[2], i%shape[2]
+                    future = executor.submit(
+                        self.optimize_globe_temperature_aaa,
+                        dataarray[:,x,y,:])
+                    future.add_done_callback(lambda p: progress.update())
+                    future_to_id[future] = i
+                for future in concurrent.futures.as_completed(future_to_id):
+                    i = future_to_id[future]
+                    tg_arr[i//s[2],i%s[2],:] = future.result()
+        with concurrent.futures.ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+            with tqdm.tqdm(total=shape[1]*shape[2]) as progress:
+                future_to_id = {}
+                for i in range(shape[1]*shape[2]):
+                    future = executor.submit(
+                        self.optimize_natural_wetbulb_temperature_aaa,
+                        dataarray[:,x,y,:])
+                    future.add_done_callback(lambda p: progress.update())
+                    future_to_id[future] = i
+                for future in concurrent.futures.as_completed(future_to_id):
+                    i = future_to_id[future]
+                    tnw_arr[i//s[2],i%s[2],:] = future.result()
         self.data['tg_5cm'] = ['time','latitude','longitude'], tg_arr
         self.data['tnw'] = ['time','latitude','longitude'], tnw_arr
 
@@ -312,7 +337,7 @@ class WBGT_ArgonneCalculator(tcitool.OptimizationCalculator):
     def closing_calculations(self):
         tg_5cmC = tf.u.tempK2C(self.data['tg_5cm'])
         tg_5cmC.attrs.update({'units':'deg C'})
-        t2mC = tf.u.tempK2C(self.tool.data['t2m'])
+        t2mC = tf.u.tempK2C(self.data['t2m'])
         t2mC.attrs.update({'units':'deg C'})
         tgC = (
             tg_5cmC + (

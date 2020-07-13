@@ -1,5 +1,9 @@
 """Author: Daan Gommers"""
 
+from contextlib import suppress
+import glob
+import os
+import tempfile
 import warnings
 
 import numpy as np
@@ -12,7 +16,7 @@ class Tool(object):
     Attributes:
         data: a DataStore containing all atmospheric data points.
     """
-    def __init__(self):
+    def __init__(self,dask_client=None):
         self.data = tcitool.DataStore()
         self.generator_registry = tcitool.GeneratorRegistry(self)
         self.calculators = {
@@ -25,6 +29,8 @@ class Tool(object):
             'windchill_jagti': tcitool.WindChill_JAGTICalculator,
         }
         self.options = {}
+        self.tmp_dir = None
+        self.dask_client = dask_client
         self._selfassert()
 
     def _selfassert(self):
@@ -65,7 +71,7 @@ class Tool(object):
     def has_options(self,*args):
         return all(map(lambda opt: opt in self.options,args))
 
-    def calculate(self,*args,calculate_now = True):
+    def calculate(self,*args,calculate_now = True, squeeze=True):
         calculator_objs = {}
         missing_calculators = []
         for calc_name in args:
@@ -84,7 +90,104 @@ class Tool(object):
             warnings.warn(warning_msg%(",".join(missing_calculators),
                                        ",".join(self.calculators.keys())),
                           tcitool.UnknownCalculatorWarning)
-        return calculator_objs
+
+        if squeeze and len(args)<2:
+            return next(iter(calculator_objs.items()))[1]
+        else:
+            return calculator_objs
 
     def list_calculators(self):
         return list(self.calculators.keys())
+
+    def solzaLight(self):
+        solards = self.data.ds.sel(latitude=self.data.ds['latitude'].mean(),method='nearest')[['time','longitude','latitude']]
+        solards = solards.expand_dims(dim='latitude')
+        solarparam = tcitool.SolarGenerators.solarParamNOAA(*tcitool.SolarGenerators.extractCoordVars(solards))
+        for key, array in solarparam.items():
+            solards[key] = array
+        solards = solards.transpose('time','longitude','latitude')
+        for key in solards.keys():
+            data = solards[key].values
+            if 'latitude' in solards[key].coords.keys():
+                data = np.repeat(
+                    data,
+                    self.data.ds['latitude'].size,
+                    axis=list(solards[key].coords.keys()).index('latitude'))
+                self.data.ds[key] = solards[key].dims, data, solards[key].attrs
+            else:
+                solarda = solards[key].expand_dims(
+                    dim={'latitude':self.data.ds.coords['latitude'].values}
+                    ).transpose('time','longitude','latitude')
+                self.data.ds[key] = solarda.dims, solarda.values, solards[key].attrs
+
+    def wbgt_argonne_external(self,folder=None,verbose=True):
+        if folder is None:
+            folder = tempfile.mkdtemp(prefix='tcitool-')
+        folder = os.path.abspath(folder)
+        with suppress(FileExistsError):
+            os.makedirs(folder, exist_ok=True)
+            os.makedirs(os.path.join(folder,'inp'), exist_ok=True)
+            os.makedirs(os.path.join(folder,'out'), exist_ok=True)
+        if not os.path.isdir(folder):
+            raise ValueError('Dir %s does not exsist and could not be created'%folder)
+        self.tmp_dir = folder
+        cmdstr = []
+        scriptloc = os.path.abspath(os.path.join(
+            os.path.dirname(os.path.realpath(tcitool.__file__)),
+            '..',
+            'argonne.py'))
+        shloc = os.path.join(folder,'run_argonne_model.sh')
+        if not os.path.isfile(scriptloc):
+            raise ValueError('Could not find argonne.py')
+
+        calc = self.calculators['wbgt_argonne'](self)
+        calc.preface()
+        datastack = np.stack([calc.data[key].values for key in calc.data.keys()],axis=0)
+        np.save(os.path.join(folder,'full_input.npy'),datastack)
+        for i in range(datastack.shape[1]):
+            inpfile = os.path.join(folder,'inp','%04d.npy'%i)
+            np.save(inpfile,datastack[:,i,...])
+
+            outfile = os.path.join(folder,'out','%04d.npy'%i)
+            verbose = ' -v' if verbose is True else ''
+            cmdstr.append(f'{scriptloc} -i {inpfile} -o {outfile} -p {i:04d}{verbose}')
+        with open(shloc,'w') as fh:
+            fh.write('\n'.join(cmdstr))
+        print(f'Written data to {folder}\nRun the following command to run the Argonne model over the data.')
+        print(f'\n$ parallel -j 4 :::: {shloc}')
+
+    def wbgt_argonne_external_import(self,folder=None):
+        if folder is None:
+            folder = self.temp_dir
+        folder = os.path.abspath(folder)
+        if not os.path.isdir(folder):
+            raise ValueError('Dir %s does not exsist.'%folder)
+        data_array = []
+        data_files = sorted(glob.glob(os.path.join(folder,'*.npy')))
+        for file in data_files:
+            file_array = np.load(file)
+            data_array.append(file_array)
+            #print(file,file_array.shape)
+        ar = np.stack(data_array,axis=1)
+        print('Combined',ar.shape)
+        if ar.shape[0] < 2:
+            raise ValueError('The first dimension needs to contain at least 2 parameters: Tg, Tnw. '+str(ar.shape))
+        if ar[0,...].shape != self.data.shape:
+            raise ValueError('This tool does not have the same shape as the imported data. (tool %s, import %s)'%(str(self.data.shape),str(ar[0,...].shape)))
+
+        print('Generating Calculator...')
+        calc = self.calculators['wbgt_argonne'](self)
+        calc.preface()
+        print('Importing data...')
+        calc.data['tg_5cm'] = (
+            list(self.data.ds['t2m'].coords.to_index().names),
+            ar[0,...],
+            {'units':'K', 'long_name': 'Globe temperature with a 5cm diameter (using the external Argonne model)'}
+        )
+        calc.data['tnw'] = (
+            list(self.data.ds['t2m'].coords.to_index().names),
+            ar[1,...],
+            {'units':'K', 'long_name': 'Natural Wet Bulb temperature (using the external Argonne model)'}
+        )
+        print('Preforming post-face calculations...')
+        calc.postface()
